@@ -12,9 +12,15 @@ export const loadImageAndGetDataArray = (cb: (data: number[]) => void) => {
     if (!file) return;
     const reader = new FileReader();
     reader.readAsDataURL(file);
+    reader.onerror = () => {
+      console.error("Failed to read file:", reader.error);
+    };
     reader.onload = () => {
       const image = new Image(MATRIX_SIZE, MATRIX_SIZE);
       image.src = reader.result as string;
+      image.onerror = () => {
+        console.error("Failed to load image");
+      };
       image.onload = () => {
         const canvas = new OffscreenCanvas(MATRIX_SIZE, MATRIX_SIZE);
         const ctx = canvas.getContext("2d");

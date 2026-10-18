@@ -1,5 +1,15 @@
 #include "PluginManager.h"
 #include "scheduler.h"
+#ifdef ESP32
+#include <mutex>
+
+// plugins are switched from the web, button and scheduler tasks while the
+// screen task runs loop(), so never tear down a plugin in the middle of it
+static std::recursive_mutex pluginLock;
+#define PLUGIN_GUARD std::lock_guard<std::recursive_mutex> guard(pluginLock)
+#else
+#define PLUGIN_GUARD
+#endif
 
 Plugin::Plugin() : id(-1)
 {
@@ -67,16 +77,7 @@ void PluginManager::renderPluginId(int pluginId)
     Screen.drawNumbers(6, 6, digits, MAX_BRIGHTNESS);
   }
 
-  unsigned long startTime = millis();
-  while (millis() - startTime < 800)
-  {
-    yield();
-#ifdef ESP32
-    vTaskDelay(pdMS_TO_TICKS(10));
-#else
-    delay(10);
-#endif
-  }
+  Screen.presentAndWait(800);
 }
 
 void PluginManager::activatePersistedPlugin()
@@ -130,6 +131,7 @@ int PluginManager::addPlugin(Plugin *plugin)
 
 void PluginManager::setActivePlugin(const char *pluginName)
 {
+  PLUGIN_GUARD;
   if (activePlugin)
   {
     activePlugin->teardown();
@@ -144,8 +146,8 @@ void PluginManager::setActivePlugin(const char *pluginName)
       activePlugin = plugin;
       Serial.printf("[Plugin] Activating: %s (ID: %d)\n", plugin->getName(), plugin->getId());
       renderPluginId(activePlugin->getId());
-      currentStatus = NONE; // Allow plugin to start drawing
       activePlugin->setup();
+      currentStatus = NONE; // Allow plugin to start drawing
       break;
     }
   }
@@ -164,16 +166,20 @@ void PluginManager::setActivePluginById(int pluginId)
 
 void PluginManager::requestPluginById(int pluginId)
 {
-  // Non-blocking: just set the pending ID, main task will handle it
+  // Non-blocking: the screen task applies the request between frames
   pendingPluginId = pluginId;
 }
 
 void PluginManager::processPendingPluginChange()
 {
+#ifdef ESP32
+  int pending = pendingPluginId.exchange(-1);
+#else
   int pending = pendingPluginId;
+  pendingPluginId = -1;
+#endif
   if (pending >= 0)
   {
-    pendingPluginId = -1;  // Clear before processing to avoid re-entry
     setActivePluginById(pending);
 #ifdef ENABLE_SERVER
     sendInfo();
@@ -183,6 +189,7 @@ void PluginManager::processPendingPluginChange()
 
 void PluginManager::setupActivePlugin()
 {
+  PLUGIN_GUARD;
   if (activePlugin)
   {
     renderPluginId(activePlugin->getId());
@@ -192,10 +199,19 @@ void PluginManager::setupActivePlugin()
 
 void PluginManager::runActivePlugin()
 {
+  PLUGIN_GUARD;
   if (activePlugin && currentStatus != UPDATE && currentStatus != LOADING &&
       currentStatus != WSBINARY)
   {
     activePlugin->loop();
+  }
+  // present under the lock: a plugin switch from another task clears and
+  // redraws the buffer, presenting in between flashes a torn frame.
+  // while LOADING someone else (plugin id, scrolling message) owns the buffer
+  // and presents its own finished frames
+  if (currentStatus != LOADING)
+  {
+    Screen.present();
   }
 }
 

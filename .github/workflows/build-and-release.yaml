@@ -14,10 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python environment
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.10"
 
@@ -46,6 +46,9 @@ jobs:
           pio upgrade
           pio pkg install
 
+      - name: Test DDP packet handoff and brightness
+        run: python contrib/test_ddp_host.py
+
       - name: Build project for esp32dev
         run: platformio run --environment esp32dev
 
@@ -66,10 +69,12 @@ jobs:
     continue-on-error: true
     strategy:
       matrix:
-        environment: [nodemcuv2, d1_mini_pro-ota, ESP32-wemos, esp32c3, esp32s3]
+        environment: [nodemcuv2, d1_mini, d1_mini_pro-ota, ESP32-wemos, esp32c3, esp32s3]
         include:
           - environment: nodemcuv2
             artifact_name: nodemcuv2_firmware
+          - environment: d1_mini
+            artifact_name: d1_mini_firmware
           - environment: d1_mini_pro-ota
             artifact_name: d1_mini_pro_ota_firmware
           - environment: ESP32-wemos
@@ -81,10 +86,10 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python environment
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.10"
 
@@ -136,7 +141,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download ESP32 firmware
         uses: actions/download-artifact@v8
@@ -149,6 +154,13 @@ jobs:
         continue-on-error: true
         with:
           name: nodemcuv2_firmware
+          path: ./builds/ # specify a target directory
+
+      - name: Download ESP8266 firmware (d1_mini)
+        uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: d1_mini_firmware
           path: ./builds/ # specify a target directory
 
       - name: Download ESP8266 firmware (d1_mini_pro-ota)
@@ -180,7 +192,7 @@ jobs:
           path: ./builds/ # specify a target directory
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           draft: true
           prerelease: true

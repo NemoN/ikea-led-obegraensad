@@ -181,6 +181,7 @@ def switch_to_ddp_plugin(ip: str, timeout: float = 5.0, verbose: bool = True) ->
             print("Install with: pip install websocket-client")
         return False
 
+    ws = None
     try:
         ws = ws_client.create_connection(f"ws://{ip}/ws", timeout=timeout)
 
@@ -201,7 +202,6 @@ def switch_to_ddp_plugin(ip: str, timeout: float = 5.0, verbose: bool = True) ->
                 if ddp_plugin is None:
                     if verbose:
                         print(f"Warning: DDP plugin not found on {ip}")
-                    ws.close()
                     return False
 
                 ddp_id = ddp_plugin["id"]
@@ -209,20 +209,21 @@ def switch_to_ddp_plugin(ip: str, timeout: float = 5.0, verbose: bool = True) ->
                 if current_plugin == ddp_id:
                     if verbose:
                         print(f"  {ip}: Already on DDP (ID: {ddp_id})")
-                    ws.close()
                     return True
 
                 if verbose:
                     print(f"  {ip}: Switching to DDP (ID: {ddp_id})...")
                 ws.send(json.dumps({"event": "plugin", "plugin": ddp_id}))
                 time.sleep(1.0)  # Wait for plugin switch animation
-                ws.close()
                 return True
 
     except Exception as e:
         if verbose:
             print(f"Warning: Could not switch {ip}: {e}")
         return False
+    finally:
+        if ws is not None:
+            ws.close()
 
 
 def discover_displays_legacy(timeout: float = 2.0, subnet: str = None) -> list[str]:

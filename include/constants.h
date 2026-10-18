@@ -5,7 +5,27 @@
 // disable if you do not want to have online functionality
 #define ENABLE_SERVER
 
-#ifdef ESP32
+// The ESP32 variants keep their SPI flash on different pins, so the generic
+// assignment further down is not usable everywhere. On the C3 the flash sits
+// on GPIO12-17 (HD/WP/CS0/CLK/MOSI/MISO) and nothing above GPIO21 exists; on
+// the S3 it occupies GPIO26-37. Driving any of those pins cuts the CPU off
+// from the flash it executes from.
+#if defined(CONFIG_IDF_TARGET_ESP32C3)
+// Free pins on the C3: GPIO2/8/9 are strapping, 18/19 native USB, 20/21 UART0.
+#define PIN_ENABLE 3
+#define PIN_DATA 4
+#define PIN_CLOCK 5
+#define PIN_LATCH 6
+#define PIN_BUTTON 7
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+// Matches the Xiao ESP32S3 column of the wiring table in the README:
+// D4=GPIO5, D10/MOSI=GPIO9, D8/SCK=GPIO7, D5=GPIO6, D3=GPIO4.
+#define PIN_ENABLE 5
+#define PIN_DATA 9
+#define PIN_CLOCK 7
+#define PIN_LATCH 6
+#define PIN_BUTTON 4
+#elif defined(ESP32)
 #define PIN_ENABLE 26
 #define PIN_DATA 27
 #define PIN_CLOCK 14
@@ -39,13 +59,41 @@
 
 // Display constants
 constexpr uint8_t MAX_BRIGHTNESS = 255;
+// moving shapes sampled onto the grid make near-black edge pixels blink, plugins
+// skip values below this for such edges
+constexpr uint8_t MIN_EDGE_BRIGHTNESS = 16;
 constexpr uint16_t TOTAL_PIXELS = ROWS * COLS;
+
+// Adaptive power limit: when a frame would draw more than the power supply can
+// deliver, the whole frame is dimmed evenly, so a few lit pixels still get full
+// brightness. Rough model from a 5 W supply: 50% of the pixels at full
+// brightness or all pixels at 70% work, all pixels at full brightness browns
+// out. With ~0.6 W for the board and WiFi that leaves ~4.4 W for ~180 fully lit
+// pixels, ~24.5 mW each.
+// Default supply rating in mW, used until changed in the settings (or always
+// without storage), 0 disables the limit
+#define POWER_LIMIT_MW 5000
+constexpr uint16_t POWER_LIMIT_MIN_MW = 1000;
+// above this a fully lit screen stays at full brightness, use 0 to disable instead
+constexpr uint16_t POWER_LIMIT_MAX_MW = 10000;
+constexpr uint16_t POWER_BASE_MW = 600;
+// per pixel at full brightness, set above the ~24.5 mW estimate to be safe
+constexpr uint16_t POWER_PER_PIXEL_MW = 30;
+// share of the supply rating kept in reserve
+constexpr uint8_t POWER_HEADROOM_PERCENT = 10;
 
 // set your city or coords (https://github.com/chubin/wttr.in)
 #define WEATHER_LOCATION "Hamburg"
 
 // name of WiFi created by the device if no known WiFi is available
 #define WIFI_MANAGER_SSID "IKEA"
+
+// hold the button this long while powering on to reset the stored WiFi
+#define WIFI_RESET_HOLD_MS 5000
+
+// override the DNS servers from DHCP (IP stays on DHCP), ESP32 only
+#define DNS_OVERRIDE_1 "8.8.8.8"
+#define DNS_OVERRIDE_2 "8.8.4.4"
 
 // use ALL of the following to use static IP config
 /*

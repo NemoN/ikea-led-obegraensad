@@ -59,7 +59,7 @@ def on_upload(source, target, env):
             }
 
         try:
-            checkAuthResponse = requests.get(f"{upload_url_compatibility}/update")
+            checkAuthResponse = requests.get(f"{upload_url_compatibility}/update", timeout=30)
         except Exception as e:
             return 'Error checking auth: ' + repr(e)
 
@@ -77,7 +77,7 @@ def on_upload(source, target, env):
             print("Serverconfiguration: authentication needed.")
             auth = HTTPDigestAuth(username, password)
             try:
-                doUpdateAuth = requests.get(start_url, headers=start_headers, auth=auth)
+                doUpdateAuth = requests.get(start_url, headers=start_headers, auth=auth, timeout=30)
             except Exception as e:
                 return 'Error while authenticating: ' + repr(e)
 
@@ -88,7 +88,7 @@ def on_upload(source, target, env):
             auth = None
             print("Serverconfiguration: authentication not needed.")
             try:
-                doUpdate = requests.get(start_url, headers=start_headers)
+                doUpdate = requests.get(start_url, headers=start_headers, timeout=30)
             except Exception as e:
                 return 'Error while starting upload: ' + repr(e)
 
@@ -125,7 +125,7 @@ def on_upload(source, target, env):
         }
 
         try:
-            response = requests.post(f"{upload_url}/ota/upload", data=monitor, headers=post_headers, auth=auth)
+            response = requests.post(f"{upload_url}/ota/upload", data=monitor, headers=post_headers, auth=auth, timeout=120)
         except Exception as e:
             return 'Error while uploading: ' + repr(e)
 

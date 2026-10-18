@@ -154,7 +154,7 @@ def discover_udp_broadcast(timeout: float = 2.0) -> list[Display]:
         # Also try common broadcast addresses
         try:
             sock.sendto(DDP_QUERY_PACKET, ("255.255.255.255", DDP_PORT))
-        except:
+        except OSError:
             pass
 
         # Listen for responses
@@ -196,7 +196,7 @@ def discover_subnet_scan(
             # Assume /24 subnet
             parts = local_ip.split(".")
             subnet = f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
-        except:
+        except OSError:
             subnet = "192.168.1.0/24"
 
     print(f"  Scanning {subnet}...")

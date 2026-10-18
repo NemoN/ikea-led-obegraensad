@@ -1,5 +1,13 @@
 #include "plugins/DDPPlugin.h"
 
+#ifdef ESP32
+#include <mutex>
+static std::mutex ddpBufferLock;
+#define DDP_BUFFER_GUARD std::lock_guard<std::mutex> guard(ddpBufferLock)
+#else
+#define DDP_BUFFER_GUARD
+#endif
+
 // Static pointer for callback access
 static DDPPlugin *instance = nullptr;
 
@@ -12,19 +20,23 @@ static uint8_t ddpFrameBuffer[ROWS * COLS];
 
 void DDPPlugin::applyBufferToScreen()
 {
-  for (int i = 0; i < ROWS * COLS; i++)
+  DDP_BUFFER_GUARD;
+  if (!bufferDirty)
   {
-    // Quantize 0-255 to 0-15 for 4-bit display
-    uint8_t brightness = ddpFrameBuffer[i] >> 4;
-    Screen.setPixelAtIndex(i, brightness > 0, brightness);
+    return;
   }
+  Screen.setRenderBuffer(ddpFrameBuffer, true);
   bufferDirty = false;
 }
 
 void DDPPlugin::setup()
 {
-  instance = this;
-  memset(ddpFrameBuffer, 0, ROWS * COLS);
+  {
+    DDP_BUFFER_GUARD;
+    instance = this;
+    memset(ddpFrameBuffer, 0, ROWS * COLS);
+    bufferDirty = false;
+  }
 
 #ifdef ASYNC_UDP_ENABLED
   udp = new AsyncUDP();
@@ -39,9 +51,9 @@ void DDPPlugin::setup()
   Serial.println("DDP server listening at port: 4048");
 
   udp->onPacket([](AsyncUDPPacket packet) {
+      DDP_BUFFER_GUARD;
       if (packet.length() < 10 || instance == nullptr)
         return;
-
       const uint8_t flags = packet.data()[0];
       const bool push = (flags & DDP_FLAG_PUSH) != 0;
       const uint8_t dataType = packet.data()[3];
@@ -65,28 +77,26 @@ void DDPPlugin::setup()
           {
             // Single pixel mode - fill entire buffer
             uint16_t sum = data[0] + data[1] + data[2];
-            uint8_t brightness = (sum * 85) >> 8;
+            uint8_t brightness = sum / 3;
             memset(ddpFrameBuffer, brightness, ROWS * COLS);
           }
           else
           {
             for (int i = 0; i < count; i++)
             {
-              // Average RGB to grayscale using multiply-shift (faster than division)
-              // (sum * 85) >> 8 ≈ sum / 3
+              // Keep full white and low nonzero values when averaging RGB.
               uint16_t sum = data[i * 3] + data[i * 3 + 1] + data[i * 3 + 2];
-              ddpFrameBuffer[i] = (sum * 85) >> 8;
+              ddpFrameBuffer[i] = sum / 3;
             }
           }
         }
         instance->bufferDirty = true;
       }
 
-      // Push flag: always apply buffer to screen
-      // (even if not dirty, to handle packet loss gracefully)
+      // Notify the plugin task; the network callback must not draw mid-present.
       if (push)
       {
-        instance->applyBufferToScreen();
+        instance->bufferDirty = true;
       }
     });
 #endif
@@ -94,7 +104,10 @@ void DDPPlugin::setup()
 
 void DDPPlugin::teardown()
 {
-  instance = nullptr;
+  {
+    DDP_BUFFER_GUARD;
+    instance = nullptr;
+  }
 #ifdef ASYNC_UDP_ENABLED
   if (udp)
   {
@@ -107,10 +120,7 @@ void DDPPlugin::teardown()
 void DDPPlugin::loop()
 {
   // Apply buffer if dirty (for senders that don't use push flag)
-  if (bufferDirty)
-  {
-    applyBufferToScreen();
-  }
+  applyBufferToScreen();
 
 #ifdef ESP32
   vTaskDelay(10);

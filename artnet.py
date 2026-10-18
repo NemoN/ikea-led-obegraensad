@@ -215,6 +215,7 @@ def switch_to_artnet_plugin(ip: str, timeout: float = 5.0, verbose: bool = True)
             print("Install with: pip install websocket-client")
         return False
 
+    ws = None
     try:
         ws = ws_client.create_connection(f"ws://{ip}/ws", timeout=timeout)
 
@@ -235,7 +236,6 @@ def switch_to_artnet_plugin(ip: str, timeout: float = 5.0, verbose: bool = True)
                 if artnet_plugin is None:
                     if verbose:
                         print(f"Warning: ArtNet plugin not found on {ip}")
-                    ws.close()
                     return False
 
                 artnet_id = artnet_plugin["id"]
@@ -243,20 +243,21 @@ def switch_to_artnet_plugin(ip: str, timeout: float = 5.0, verbose: bool = True)
                 if current_plugin == artnet_id:
                     if verbose:
                         print(f"  {ip}: Already on ArtNet (ID: {artnet_id})")
-                    ws.close()
                     return True
 
                 if verbose:
                     print(f"  {ip}: Switching to ArtNet (ID: {artnet_id})...")
                 ws.send(json.dumps({"event": "plugin", "plugin": artnet_id}))
                 time.sleep(1.0)  # Wait for plugin switch animation
-                ws.close()
                 return True
 
     except Exception as e:
         if verbose:
             print(f"Warning: Could not switch {ip}: {e}")
         return False
+    finally:
+        if ws is not None:
+            ws.close()
 
 
 def main() -> None:

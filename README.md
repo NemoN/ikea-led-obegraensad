@@ -22,6 +22,7 @@ Turn your OBEGRÄNSAD LED Wall Lamp into a live drawing canvas
   - [ESP32 Setup with VS Code and PlatformIO](#esp32-setup-with-vs-code-and-platformio)
   - [WiFi Configuration](#wifi-configuration)
   - [Runtime Configuration](#runtime-configuration)
+  - [Power Limit](#power-limit)
 - [OTA Updates](#ota-updates)
   - [Configuration](#configuration)
   - [Upload Methods](#upload-methods)
@@ -55,10 +56,12 @@ Turn your OBEGRÄNSAD LED Wall Lamp into a live drawing canvas
 - WiFi Control
 - Web GUI
 - Load an image
-- Runtime configuration for Weather / NTP / Timezone via `/config`
+- Runtime configuration for Weather / NTP / Timezone via the Settings page
 - DDP and ArtNet streaming support
 - Switch plugin by pressing the button
 - Schedule Plugins to switch after "n" seconds
+- Schedule different brightness for time frame
+- Adaptive power limit for weak power supplies
 
 **Available Plugins:**
 
@@ -92,6 +95,16 @@ Turn your OBEGRÄNSAD LED Wall Lamp into a live drawing canvas
 - Pong Clock
 - Ticking Clock
 - ArtNet
+- BigPong
+- Auto Walker
+- Bouncing Ball
+- Face
+- Falling Sand
+- Flappy Bird
+- Space Invaders
+- Spotlight
+- Tetris
+- Tron
 
 </details>
 
@@ -104,7 +117,7 @@ Control the lamp using the built-in web GUI. Find the device IP address via:
 - Serial monitor output
 - Router admin panel
 
-For runtime configuration after the first boot, open `http://your-device-ip/config`.
+For runtime configuration after the first boot, open Settings in the web GUI.
 
 ---
 
@@ -116,7 +129,7 @@ This software is designed for ESP32 Dev Boards but can work with other Arduino b
 
 - ESP32 Dev Board (recommended)
 - TTGO LoRa32 V2.1 (T3_V1.6.1)
-- ESP8266 (with limitations: per-pixel brightness only works when storage and global brightness are disabled)
+- ESP8266, e.g. NodeMCUv2 or Wemos D1 mini (with limitations: per-pixel brightness only works when storage and global brightness are disabled)
 
 <img src="https://user-images.githubusercontent.com/15351728/200148521-86d0f9e6-2c41-4707-b2d9-8aa24a0e440e.jpg" width="60%" />
 
@@ -143,16 +156,16 @@ Inside you'll find 4 identical plates with 64 LEDs each (in 4 fields). Focus on 
 
 Connect the pins as shown below. Remember to configure them in `include/constants.h` according to your board.
 
-|       LCD        | ESP32  | TTGO LoRa32 | NodeMCUv2 | Lolin D32 (Pro) | Xiao ESP32S3 |
-| :--------------: | :----: | :---------: | :-------: | :-------------: | :----------: |
-|       GND        |  GND   |     GND     |    GND    |       GND       |     GND      |
-|       VCC        |   5V   |     5V      |    VIN    |       USB       |     VUSB     |
-| EN (PIN_ENABLE)  | GPIO26 |    IO22     | GPIO16 D0 |     GPIO26      |  D4 (GPIO5)  |
-|  IN (PIN_DATA)   | GPIO27 |    IO23     | GPIO13 D7 |     GPIO27      |  D10 (MOSI)  |
-| CLK (PIN_CLOCK)  | GPIO14 |    IO02     | GPIO14 D5 |     GPIO14      |   D8 (SCK)   |
-| CLA (PIN_LATCH)  | GPIO12 |    IO15     | GPIO0 D3  |     GPIO12      |  D5 (GPIO6)  |
-|  BUTTON one end  | GPIO16 |    IO21     | GPIO2 D4  |     GPIO25      |  D3 (GPIO4)  |
-| BUTTON other end |  GND   |     GND     |    GND    |       GND       |     GND      |
+|       LCD        | ESP32  | ESP32-C3 | TTGO LoRa32 | NodeMCUv2 | Wemos D1 mini | Lolin D32 (Pro) | Xiao ESP32S3 |
+| :--------------: | :----: | :------: | :---------: | :-------: | :-----------: | :-------------: | :----------: |
+|       GND        |  GND   |   GND    |     GND     |    GND    |      GND      |       GND       |     GND      |
+|       VCC        |   5V   |    5V    |     5V      |    VIN    |       5V      |       USB       |     VUSB     |
+| EN (PIN_ENABLE)  | GPIO26 |  GPIO3   |    IO22     | GPIO16 D0 |   GPIO16 D0   |     GPIO26      |  D4 (GPIO5)  |
+|  IN (PIN_DATA)   | GPIO27 |  GPIO4   |    IO23     | GPIO13 D7 |   GPIO13 D7   |     GPIO27      |  D10 (MOSI)  |
+| CLK (PIN_CLOCK)  | GPIO14 |  GPIO5   |    IO02     | GPIO14 D5 |   GPIO14 D5   |     GPIO14      |   D8 (SCK)   |
+| CLA (PIN_LATCH)  | GPIO12 |  GPIO6   |    IO15     | GPIO0 D3  |    GPIO0 D3   |     GPIO12      |  D5 (GPIO6)  |
+|  BUTTON one end  | GPIO16 |  GPIO7   |    IO21     | GPIO2 D4  |    GPIO2 D4   |     GPIO25      |  D3 (GPIO4)  |
+| BUTTON other end |  GND   |   GND    |     GND     |    GND    |      GND      |       GND       |     GND      |
 
 <img src="https://user-images.githubusercontent.com/86414213/205999001-6213fc4f-be2f-4305-a17a-44fdc9349069.jpg" width="60%" />
 
@@ -208,12 +221,27 @@ You can use the original button wiring without adding external connections. See 
 This project uses [tzapu's WiFiManager](https://github.com/tzapu/WiFiManager). After booting:
 
 1. Device attempts to connect to known access points
-2. If none available, creates network named `Ikea Display Setup WiFi`
+2. If none available, creates network named `IKEA`
 3. Connect to this network on any device
 4. Captive portal guides you through WiFi configuration
 5. Device reboots and connects to your network
 
 \*_Network name can be changed via `WIFI_MANAGER_SSID` in `include/constants.h`._
+
+#### Resetting WiFi
+
+To switch to another network, clear the stored WiFi credentials:
+
+1. Unplug the device
+2. Press and hold the button while plugging it back in
+3. Keep holding for 5 seconds, then release
+4. The device starts the `IKEA` setup network, continue with step 3 above
+
+Releasing the button earlier cancels the reset. Only the WiFi credentials are cleared, all other settings (plugins, schedule, weather location, ...) are kept. The hold time can be changed via `WIFI_RESET_HOLD_MS` in `include/constants.h`.
+
+#### DNS Servers
+
+By default the device replaces the DNS servers handed out by your router with `8.8.8.8` and `8.8.4.4` (ESP32 only), the IP address itself still comes from DHCP. Change or comment out `DNS_OVERRIDE_1` / `DNS_OVERRIDE_2` in `include/constants.h` to use other servers or the ones from your router.
 
 **ESP8266 (Manual Configuration):**
 
@@ -221,7 +249,7 @@ For ESP8266, WiFi Manager is not available. Set `WIFI_SSID` and `WIFI_PASSWORD` 
 
 ### Runtime Configuration
 
-After the first boot you can configure some settings directly in the browser at `http://your-device-ip/config`.
+After the first boot you can configure some settings directly in the browser under **Settings** in the web GUI.
 
 Currently configurable at runtime:
 
@@ -230,6 +258,13 @@ Currently configurable at runtime:
 - Timezone (POSIX TZ string)
 
 The same settings are also available via `GET /api/config`, `POST /api/config`, and `POST /api/config/reset`.
+### Power Limit
+
+Many lit pixels at high brightness can draw more than a small USB power supply delivers and cause brownouts. The power limit estimates the power of every frame and dims the whole frame evenly when it would exceed the budget. Frames with only a few lit pixels keep full brightness.
+
+Set the rating of your power supply in mW under **Settings → Power** in the web GUI (1000–10000 mW), or switch the limit off. The default of 5000 mW comes from `POWER_LIMIT_MW` in `include/constants.h` and is also used on boards without storage (ESP8266), `0` disables it there.
+
+The estimate assumes ~0.6 W for the board and WiFi (`POWER_BASE_MW`), 30 mW per fully lit pixel (`POWER_PER_PIXEL_MW`) and keeps 10% of the supply in reserve (`POWER_HEADROOM_PERCENT`). With 5000 mW a fully lit screen runs at about 51% brightness.
 
 ---
 
@@ -338,7 +373,15 @@ curl http://your-server/api/info
   "status": "active",
   "plugin": 3,
   "rotation": 90,
-  "brightness": 255,
+  "baseBrightness": 255,
+  "brightness": 64,
+  "brightnessSchedule": {
+    "enabled": true,
+    "startTime": "22:00",
+    "endTime": "07:00",
+    "brightness": 64,
+    "active": true
+  },
   "scheduleActive": true,
   "schedule": [
     { "pluginId": 2, "duration": 60 },
@@ -395,6 +438,9 @@ Use `GET /api/info` to discover the current plugin ids instead of relying on har
 
 #### Set Brightness
 
+Sets the persistent base brightness. When Scheduled Brightness is currently active, the display remains at its
+scheduled level until the interval ends or the schedule is disabled.
+
 ```http
 PATCH /api/brightness?value={0-255}
 ```
@@ -413,6 +459,33 @@ curl -X PATCH "http://your-server/api/brightness?value=100"
   "message": "Brightness set successfully"
 }
 ```
+
+#### Scheduled Brightness
+
+Scheduled Brightness applies a lower (or higher) global brightness during one repeating local-time interval each
+day. It is configured in the Web GUI and runs on the device, so it continues while the browser is closed. The
+device timezone and NTP configuration determine local time. If time is not synchronized yet, the base brightness is
+used until it is.
+
+Intervals are start-inclusive and end-exclusive and may cross midnight, for example `22:00` through `07:00`.
+
+```http
+PUT /api/brightness-schedule
+Content-Type: application/json
+```
+
+```json
+{
+  "enabled": true,
+  "startTime": "22:00",
+  "endTime": "07:00",
+  "brightness": 64
+}
+```
+
+`startTime` and `endTime` must be zero-padded local `HH:MM` values and must differ. `brightness` is an integer
+between `0` and `255`. A successful response includes the base brightness, current display brightness, and the
+complete `brightnessSchedule` object shown by `GET /api/info`.
 
 #### Get Display Data
 
@@ -859,6 +932,10 @@ pre-commit install
 
 ---
 
+### Host Regression Test
+
+Run `python3 contrib/test_ddp_host.py` with a C++ compiler installed. This tests DDP packet handoff, grayscale/RGB brightness, short and oversized packets, and teardown without a lamp connected.
+
 ### Plugin Development
 
 #### **1. Create Plugin Files**
@@ -936,6 +1013,7 @@ pluginManager.addPlugin(new MyPlugin());
 ### Microcontroller is stuck in boot loop / flickering panel / black panel
 
 - Break the 5V connection between the matrix display and the microcontroller board (cut cable between controller and VCC and insulate ends with tape)
+- Lower the [power limit](#power-limit) to match your power supply
 - Use separate USB power cables for the microcontroller and the matrix display (e.g. by using a power supply with 2x5V output of 10W each)
 - Reason: When voltage drops too low on the microcontroller board output pins might not reach 3.3V, since the matrix display is actually expecting a 0V-5V signal the resulting output voltage of the microcontroller might be lower than the threshold of the matrix display resulting in flickering / completely black matrix displays. Additionally must power supplies only deliver 10W per port which is not always sufficient to power microcontroller and matrix displays (especially at brightness 100% and more than half the pixels being lit)
 - Has the additional advantage that you can upload firmware without dissassembly of the backpanel if you cannot use OTA updates

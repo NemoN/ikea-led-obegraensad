@@ -1,4 +1,5 @@
 #include "plugins/ClockPlugin.h"
+#include "timing.h"
 
 void ClockPlugin::setup()
 {
@@ -18,8 +19,7 @@ void ClockPlugin::setup()
 
 void ClockPlugin::loop()
 {
-  // Use timeout of 100ms to avoid blocking, NTP sync happens in background
-  if (getLocalTime(&timeinfo, 100))
+  if (getSyncedLocalTime(timeinfo))
   {
     // NTP recovered from failure - force full redraw
     if (ntpFailed)

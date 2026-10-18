@@ -1,4 +1,5 @@
 #include "plugins/TickingClockPlugin.h"
+#include "timing.h"
 
 void TickingClockPlugin::setup()
 {
@@ -11,8 +12,7 @@ void TickingClockPlugin::setup()
 
 void TickingClockPlugin::loop()
 {
-  // Use timeout of 100ms to avoid blocking, NTP sync happens in background
-  if (getLocalTime(&timeinfo, 100))
+  if (getSyncedLocalTime(timeinfo))
   {
     // NTP recovered from failure - force full redraw
     if (ntpFailed)
@@ -34,60 +34,28 @@ void TickingClockPlugin::loop()
       if (previousHH.empty())
       {
         Screen.clear();
-        Screen.drawCharacter(2,
-                             0,
-                             Screen.readBytes(fonts[1].data[hh[0]]),
-                             8,
-                             Screen.getCurrentBrightness());
-        Screen.drawCharacter(9,
-                             0,
-                             Screen.readBytes(fonts[1].data[hh[1]]),
-                             8,
-                             Screen.getCurrentBrightness());
-        Screen.drawCharacter(2,
-                             9,
-                             Screen.readBytes(fonts[1].data[mm[0]]),
-                             8,
-                             Screen.getCurrentBrightness());
-        Screen.drawCharacter(9,
-                             9,
-                             Screen.readBytes(fonts[1].data[mm[1]]),
-                             8,
-                             Screen.getCurrentBrightness());
+        Screen.drawBitmap(2, 0, fontGlyph(fonts[1], hh[0]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
+        Screen.drawBitmap(9, 0, fontGlyph(fonts[1], hh[1]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
+        Screen.drawBitmap(2, 9, fontGlyph(fonts[1], mm[0]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
+        Screen.drawBitmap(9, 9, fontGlyph(fonts[1], mm[1]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
       }
       else
       {
         if (hh[0] != previousHH[0])
         {
-          Screen.drawCharacter(2,
-                               0,
-                               Screen.readBytes(fonts[1].data[hh[0]]),
-                               8,
-                               Screen.getCurrentBrightness());
+          Screen.drawBitmap(2, 0, fontGlyph(fonts[1], hh[0]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
         }
         if (hh[1] != previousHH[1])
         {
-          Screen.drawCharacter(9,
-                               0,
-                               Screen.readBytes(fonts[1].data[hh[1]]),
-                               8,
-                               Screen.getCurrentBrightness());
+          Screen.drawBitmap(9, 0, fontGlyph(fonts[1], hh[1]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
         }
         if (mm[0] != previousMM[0])
         {
-          Screen.drawCharacter(2,
-                               9,
-                               Screen.readBytes(fonts[1].data[mm[0]]),
-                               8,
-                               Screen.getCurrentBrightness());
+          Screen.drawBitmap(2, 9, fontGlyph(fonts[1], mm[0]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
         }
         if (mm[1] != previousMM[1])
         {
-          Screen.drawCharacter(9,
-                               9,
-                               Screen.readBytes(fonts[1].data[mm[1]]),
-                               8,
-                               Screen.getCurrentBrightness());
+          Screen.drawBitmap(9, 9, fontGlyph(fonts[1], mm[1]), fonts[1].sizeY, 8, MAX_BRIGHTNESS);
         }
       }
 
@@ -102,9 +70,9 @@ void TickingClockPlugin::loop()
       Screen.clearRect(0, 7, 16, 2);
       // alternating second pixel
       if ((timeinfo.tm_sec * 32 / 60) % 2 == 0)
-        Screen.setPixel(timeinfo.tm_sec * 16 / 60, 7, 1, Screen.getCurrentBrightness());
+        Screen.setPixel(timeinfo.tm_sec * 16 / 60, 7, 1, MAX_BRIGHTNESS);
       else
-        Screen.setPixel(timeinfo.tm_sec * 16 / 60, 8, 1, Screen.getCurrentBrightness());
+        Screen.setPixel(timeinfo.tm_sec * 16 / 60, 8, 1, MAX_BRIGHTNESS);
 
       previousSecond = timeinfo.tm_sec;
     }

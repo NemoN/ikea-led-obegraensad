@@ -2,6 +2,9 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#ifdef ESP32
+#include <atomic>
+#endif
 #include <string>
 #include <vector>
 
@@ -38,7 +41,12 @@ private:
   Plugin *activePlugin = nullptr;
   int nextPluginId;
   int persistedPluginId = 1;
-  volatile int pendingPluginId = -1;  // For async plugin switching
+  // ESP32 receives requests from other tasks; ESP8266 callbacks run in loop().
+#ifdef ESP32
+  std::atomic<int> pendingPluginId{-1};
+#else
+  int pendingPluginId = -1;
+#endif
 
   void renderPluginId(int pluginId);
 
@@ -49,7 +57,7 @@ public:
   void setActivePlugin(const char *pluginName);
   void setActivePluginById(int pluginId);
   void requestPluginById(int pluginId);  // Non-blocking request for async contexts
-  void processPendingPluginChange();     // Called from main task to apply pending change
+  void processPendingPluginChange();     // Called from the screen task to apply pending change
   void runActivePlugin();
   void setupActivePlugin();
   void activateNextPlugin();

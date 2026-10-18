@@ -16,7 +16,7 @@
 
 // DDP Data types (byte 3 in header)
 #define DDP_TYPE_RGB 0x01       // 3 bytes per pixel (R, G, B)
-#define DDP_TYPE_GRAYSCALE 0x02 // 1 byte per pixel (brightness 0-15)
+#define DDP_TYPE_GRAYSCALE 0x02 // 1 byte per pixel (brightness 0-255)
 
 class DDPPlugin : public Plugin
 {
