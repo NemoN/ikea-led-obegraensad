@@ -101,15 +101,28 @@ class DDPHostTest(unittest.TestCase):
                       deliver(DDP_TYPE_RGB, {255, 255, 255});
                       plugin.loop();
                       for (auto pixel : Screen.pixels) assert(pixel == 255);
+                      const int writesBeforeSync = Screen.writes;
                       deliver(DDP_TYPE_RGB, {0, 0, 0, 1, 1, 1}, false);
+                      plugin.loop();
+                      assert(Screen.writes == writesBeforeSync);
+                      for (auto pixel : Screen.pixels) assert(pixel == 255);
+                      deliver(DDP_TYPE_GRAYSCALE, {}); // Commit the buffered RGB frame.
                       plugin.loop();
                       assert(Screen.pixels[0] == 0 && Screen.pixels[1] == 1);
                       deliver(DDP_TYPE_GRAYSCALE, std::vector<uint8_t>(300, 42), false);
                       plugin.loop();
-                      for (auto pixel : Screen.pixels) assert(pixel == 42);
-                      deliver(DDP_TYPE_GRAYSCALE, {}); // PUSH-only packet keeps the frame.
+                      assert(Screen.pixels[0] == 0 && Screen.pixels[1] == 1);
+                      deliver(DDP_TYPE_GRAYSCALE, {});
+                      // A newer unpushed frame cannot replace the committed snapshot.
+                      deliver(DDP_TYPE_GRAYSCALE, std::vector<uint8_t>(256, 99), false);
                       plugin.loop();
                       for (auto pixel : Screen.pixels) assert(pixel == 42);
+                      plugin.loop();
+                      for (auto pixel : Screen.pixels) assert(pixel == 42);
+                      deliver(DDP_TYPE_GRAYSCALE, {});
+                      plugin.loop();
+                      for (auto pixel : Screen.pixels) assert(pixel == 99);
+                      deliver(DDP_TYPE_GRAYSCALE, {}); // Teardown discards pending commits.
                       plugin.teardown();
                       const int writes = Screen.writes;
                       deliver(DDP_TYPE_GRAYSCALE, {255}); // A late callback is ignored.

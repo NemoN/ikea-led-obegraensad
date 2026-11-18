@@ -14,8 +14,10 @@ static DDPPlugin *instance = nullptr;
 // Frame buffer in DRAM for faster ISR access on ESP32
 #ifdef ESP32
 static DRAM_ATTR uint8_t ddpFrameBuffer[ROWS * COLS];
+static DRAM_ATTR uint8_t ddpReadyFrame[ROWS * COLS];
 #else
 static uint8_t ddpFrameBuffer[ROWS * COLS];
+static uint8_t ddpReadyFrame[ROWS * COLS];
 #endif
 
 void DDPPlugin::applyBufferToScreen()
@@ -25,7 +27,7 @@ void DDPPlugin::applyBufferToScreen()
   {
     return;
   }
-  Screen.setRenderBuffer(ddpFrameBuffer, true);
+  Screen.setRenderBuffer(ddpReadyFrame, true);
   bufferDirty = false;
 }
 
@@ -35,6 +37,7 @@ void DDPPlugin::setup()
     DDP_BUFFER_GUARD;
     instance = this;
     memset(ddpFrameBuffer, 0, ROWS * COLS);
+    memset(ddpReadyFrame, 0, ROWS * COLS);
     bufferDirty = false;
   }
 
@@ -90,12 +93,13 @@ void DDPPlugin::setup()
             }
           }
         }
-        instance->bufferDirty = true;
       }
 
-      // Notify the plugin task; the network callback must not draw mid-present.
+      // Commit a snapshot on PUSH. Later unpushed packets must not overwrite
+      // the committed frame before the display task has consumed it.
       if (push)
       {
+        memcpy(ddpReadyFrame, ddpFrameBuffer, ROWS * COLS);
         instance->bufferDirty = true;
       }
     });
@@ -107,6 +111,7 @@ void DDPPlugin::teardown()
   {
     DDP_BUFFER_GUARD;
     instance = nullptr;
+    bufferDirty = false;
   }
 #ifdef ASYNC_UDP_ENABLED
   if (udp)
@@ -119,7 +124,7 @@ void DDPPlugin::teardown()
 
 void DDPPlugin::loop()
 {
-  // Apply buffer if dirty (for senders that don't use push flag)
+  // Only a committed PUSH frame is eligible for display.
   applyBufferToScreen();
 
 #ifdef ESP32

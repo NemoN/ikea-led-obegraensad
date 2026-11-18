@@ -752,6 +752,8 @@ python3 ddp.py pixels --ip 192.168.178.50 -p 0 0 255 -p 15 15 128
 
 The firmware quantizes incoming brightness values from `0..255` down to the display's `0..15` brightness range.
 
+Packets without the PUSH flag buffer pixel data. A packet with PUSH commits the buffered frame for display; it may contain new pixel data or be an empty sync packet. The Python client's `send_frame_sync()` and `send_buffer_sync()` use this to release frames across multiple displays.
+
 **Example (Python):**
 
 ```python
