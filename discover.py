@@ -15,6 +15,8 @@ Usage:
     python discover.py --protocol artnet # Only ArtNet displays
 """
 
+from __future__ import annotations
+
 import argparse
 import socket
 import struct
@@ -58,7 +60,7 @@ class Display:
         return f"{self.ip}:{self.port} [{self.protocol}]"
 
 
-class MDNSListener(ServiceListener):
+class MDNSListener(ServiceListener if ZEROCONF_AVAILABLE else object):
     """Listener for mDNS service discovery"""
 
     def __init__(self):

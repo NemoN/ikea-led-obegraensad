@@ -58,7 +58,13 @@ def create_artdmx_packet(
 
     Returns:
         Complete Art-DMX packet ready to send
+
+    Raises:
+        ValueError: More than 512 DMX channels were supplied.
     """
+    if len(data) > 512:
+        raise ValueError("Art-DMX payload must not exceed 512 bytes")
+
     packet = bytearray()
 
     # Art-Net magic (8 bytes)
@@ -83,18 +89,14 @@ def create_artdmx_packet(
     packet.append((universe >> 8) & 0xFF)
 
     # Length (2 bytes, big-endian) - must be even, 2-512
-    length = len(data)
-    if length % 2 == 1:
-        length += 1
-    length = max(2, min(512, length))
+    length = max(2, len(data) + len(data) % 2)
     packet.append((length >> 8) & 0xFF)
     packet.append(length & 0xFF)
 
     # Data
     packet.extend(data)
-    # Pad to even length if needed
-    if len(data) % 2 == 1:
-        packet.append(0)
+    # Match the declared length, including the minimum two-byte payload.
+    packet.extend(bytes(length - len(data)))
 
     return packet
 
