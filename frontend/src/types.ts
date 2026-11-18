@@ -40,6 +40,7 @@ export interface StoreActions {
   setArtnetUniverse: (artnetUniverse: number) => void;
   setGOLDelay: (GOLDelay: number) => void;
   setLivePreview: (enabled: boolean) => void;
+  setPower: (power: boolean) => void;
   send: (message: string | ArrayBuffer) => void;
 }
 
@@ -61,6 +62,7 @@ export interface Store {
   schedule: ScheduleItem[];
   livePreview: boolean;
   animationUploadResult: AnimationUploadResult | null;
+  power: boolean;
 }
 
 export interface IToastContext {

@@ -2,14 +2,33 @@
 #include "config.h"
 #include "websocket.h"
 
+#ifdef ESP32
+#define LOCK_SCHEDULE() std::lock_guard<std::recursive_mutex> scheduleLock(scheduleMutex)
+#else
+#define LOCK_SCHEDULE()
+#endif
+
 PluginScheduler &PluginScheduler::getInstance()
 {
   static PluginScheduler instance;
   return instance;
 }
 
+std::vector<ScheduleItem> PluginScheduler::getSchedule() const
+{
+  LOCK_SCHEDULE();
+  return schedule;
+}
+
+bool PluginScheduler::hasSchedule() const
+{
+  LOCK_SCHEDULE();
+  return !schedule.empty();
+}
+
 void PluginScheduler::addItem(int pluginId, unsigned long durationSeconds)
 {
+  LOCK_SCHEDULE();
   ScheduleItem item = {
       .pluginId = pluginId,
       .duration = durationSeconds * 1000 // Convert to milliseconds
@@ -19,6 +38,7 @@ void PluginScheduler::addItem(int pluginId, unsigned long durationSeconds)
 
 void PluginScheduler::clearSchedule(bool emptyStorage)
 {
+  LOCK_SCHEDULE();
   currentIndex = 0;
   isActive = false;
 #ifdef ENABLE_STORAGE
@@ -40,6 +60,7 @@ void PluginScheduler::clearSchedule(bool emptyStorage)
 
 void PluginScheduler::start()
 {
+  LOCK_SCHEDULE();
   if (!schedule.empty())
   {
     currentIndex = 0;
@@ -81,6 +102,7 @@ void PluginScheduler::update()
 {
   checkAndPersist();
 
+  LOCK_SCHEDULE();
   if (!isActive || schedule.empty())
     return;
 
@@ -95,6 +117,7 @@ void PluginScheduler::update()
 
 void PluginScheduler::switchToCurrentPlugin()
 {
+  LOCK_SCHEDULE();
   if (currentIndex < schedule.size())
   {
     pluginManager.setActivePluginById(schedule[currentIndex].pluginId);
@@ -108,7 +131,7 @@ void PluginScheduler::init()
 {
 #ifdef ENABLE_STORAGE
   storage.begin("led-wall", true);
-  const String savedSchedule = storage.getString("schedule");
+  const String savedSchedule = getStoredString(storage, "schedule");
   storage.end();
 
   // Loading must not rewrite NVS or reopen a Preferences handle still in use.
@@ -136,6 +159,7 @@ bool PluginScheduler::setScheduleByJSONString(String scheduleJson, bool shouldSt
     return false;
   }
 
+  LOCK_SCHEDULE();
   clearSchedule();
   schedule.clear();
 

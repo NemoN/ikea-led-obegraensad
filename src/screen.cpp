@@ -54,6 +54,16 @@ uint8_t Screen_::getCurrentBrightness() const
   return brightness_;
 }
 
+bool Screen_::isPowered() const
+{
+  return power_;
+}
+
+void Screen_::setPower(bool on)
+{
+  power_ = on;
+}
+
 uint8_t Screen_::getBaseBrightness() const
 {
   return baseBrightness_;
@@ -81,12 +91,6 @@ void Screen_::setDisplayedBrightness(uint8_t brightness)
   pinMode(PIN_ENABLE, OUTPUT);
   digitalWrite(PIN_ENABLE, LOW);
 #endif
-}
-
-void Screen_::setPowerLimit(uint16_t milliwatts)
-{
-  // the next present() sees the changed budget and redraws the frame
-  powerBudget_ = powerBudgetFor(milliwatts);
 }
 
 void Screen_::setRenderBuffer(const uint8_t *renderBuffer, bool grays)
@@ -156,7 +160,7 @@ void Screen_::loadFromStorage()
   storage.begin("led-wall", true);
 
   clear();
-  storage.getBytes("data", renderBuffer_, ROWS * COLS);
+  getStoredBytes(storage, "data", renderBuffer_, ROWS * COLS);
 
   setBaseBrightness(storage.getUInt("brightness", MAX_BRIGHTNESS));
   setDisplayedBrightness(getBaseBrightness());
@@ -298,12 +302,10 @@ void Screen_::present()
   const bool updating = currentStatus == UPDATE;
   // the update screen is drawn unrotated and without grays
   const uint8_t rotation = updating ? 0 : currentRotation;
-  const uint8_t brightness = brightness_;
-  const uint32_t powerBudget = powerBudget_;
+  const uint8_t brightness = power_ ? brightness_ : 0;
   const int16_t key = (updating << 10) | (rotation << 8) | brightness;
 
-  if (key == presentedKey_ && powerBudget == presentedPowerBudget_ &&
-      memcmp(renderBuffer_, presentedBuffer_, TOTAL_PIXELS) == 0)
+  if (key == presentedKey_ && memcmp(renderBuffer_, presentedBuffer_, TOTAL_PIXELS) == 0)
   {
     return;
   }
@@ -314,34 +316,16 @@ void Screen_::present()
   }
 
   uint8_t frame[TOTAL_PIXELS];
-  // LED current follows the PWM on-time, so the sum of the values is the load
-  uint32_t load = 0;
   for (int idx = 0; idx < TOTAL_PIXELS; idx++)
   {
     const uint8_t pixelValue = renderBuffer_[pixelMap_[idx]];
     if (updating)
     {
       frame[idx] = pixelValue > 0 ? MAX_BRIGHTNESS : 0;
+      continue;
     }
-    else
-    {
-      uint8_t scaledValue = ((uint16_t)pixelValue * brightness) / MAX_BRIGHTNESS;
-      frame[idx] = (brightness > 0 && pixelValue > 0 && scaledValue == 0) ? 1 : scaledValue;
-    }
-    load += frame[idx];
-  }
-
-  // over the power budget: dim all pixels by the same factor
-  if (powerBudget > 0 && load > powerBudget)
-  {
-    for (int idx = 0; idx < TOTAL_PIXELS; idx++)
-    {
-      if (frame[idx] > 0)
-      {
-        const uint8_t limitedValue = (frame[idx] * powerBudget) / load;
-        frame[idx] = limitedValue > 0 ? limitedValue : 1;
-      }
-    }
+    uint8_t scaledValue = ((uint16_t)pixelValue * brightness) / MAX_BRIGHTNESS;
+    frame[idx] = (brightness > 0 && pixelValue > 0 && scaledValue == 0) ? 1 : scaledValue;
   }
 
   // withdraw a pending frame, so the timer cannot swap to the back planes
@@ -376,7 +360,6 @@ void Screen_::present()
   frameCounter_++;
   SCREEN_UNLOCK();
   presentedKey_ = key;
-  presentedPowerBudget_ = powerBudget;
 }
 
 void Screen_::presentAndWait(uint32_t ms)

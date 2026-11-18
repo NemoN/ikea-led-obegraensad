@@ -86,9 +86,13 @@ COMMON = {
             return true;
           }
           void end() { assert(opened); opened = false; }
-          String getString(const char *key) {
+          bool isKey(const char *key) {
             assert(opened);
-            return strings[key];
+            return strings.count(key) || integers.count(key);
+          }
+          String getString(const char *key, const String &fallback = String()) {
+            assert(opened);
+            return strings.count(key) ? strings[key] : fallback;
           }
           void putString(const char *key, const String &value) {
             assert(opened && !readOnly);
@@ -106,6 +110,10 @@ COMMON = {
           }
         };
         inline StorageMock storage;
+        inline String getStoredString(StorageMock &prefs, const char *key,
+                                      const String &fallback = String()) {
+          return prefs.isKey(key) ? prefs.getString(key, fallback) : fallback;
+        }
     ''',
     "websocket.h": r'''
         #pragma once
@@ -156,8 +164,7 @@ class RuntimeHostTest(unittest.TestCase):
               const String saved = R"([{"pluginId":2,"duration":3},{"pluginId":4,"duration":5}])";
               for (bool autoStart : {false, true}) {
                 for (int previouslyActive : {0, 1}) {
-                  Scheduler.clearSchedule();
-                  Scheduler.schedule.clear();
+                  Scheduler.clearSchedule(true);
                   storage.strings["schedule"] = saved;
                   storage.integers["scheduleactive"] = previouslyActive;
                   storage.writes = 0;
@@ -166,8 +173,8 @@ class RuntimeHostTest(unittest.TestCase):
                   Scheduler.init();
                   assert(!storage.opened && storage.writes == 0);
                   assert(storage.strings["schedule"] == saved);
-                  assert(Scheduler.schedule.size() == 2);
-                  assert(Scheduler.schedule[0].duration == 3000);
+                  assert(Scheduler.getSchedule().size() == 2);
+                  assert(Scheduler.getSchedule()[0].duration == 3000);
                   assert(Scheduler.isActive == autoStart);
                   assert(pluginManager.switches.size() == (autoStart ? 1 : 0));
                   if (autoStart) {
@@ -178,12 +185,11 @@ class RuntimeHostTest(unittest.TestCase):
                 }
               }
               for (const String invalid : {String(""), String("not json"), String("{}"), String("[]")}) {
-                Scheduler.clearSchedule();
-                Scheduler.schedule.clear();
+                Scheduler.clearSchedule(true);
                 storage.strings["schedule"] = invalid;
                 config.autoStart = true;
                 Scheduler.init();
-                assert(!Scheduler.isActive && Scheduler.schedule.empty());
+                assert(!Scheduler.isActive && !Scheduler.hasSchedule());
               }
               assert(Scheduler.setScheduleByJSONString(saved));
               assert(storage.strings["schedule"] == saved);

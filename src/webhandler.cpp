@@ -2,6 +2,7 @@
 #include "brightness_schedule.h"
 #include "config.h"
 #include "messages.h"
+#include "mqtt.h"
 #include "scheduler.h"
 #include "websocket.h"
 #include "PluginManager.h"
@@ -27,7 +28,9 @@ static void applyConfigChanges()
   tzInfo = config.getTzInfo();
   configTzTime(tzInfo.c_str(), ntpServer.c_str());
 
-  Screen.setPowerLimit(config.getPowerLimitMw());
+#ifdef ENABLE_MQTT
+  mqttReconfigure();
+#endif
 
   for (Plugin *plugin : pluginManager.getAllPlugins())
   {
@@ -172,29 +175,14 @@ void handleMessageRemove(AsyncWebServerRequest *request)
 void handleSetPlugin(AsyncWebServerRequest *request)
 {
   int id = request->arg("id").toInt();
-
-  // Verify plugin exists before requesting
-  std::vector<Plugin *> &allPlugins = pluginManager.getAllPlugins();
-  bool pluginExists = false;
-  for (Plugin *plugin : allPlugins)
+  if (pluginManager.setActivePluginById(id))
   {
-    if (plugin->getId() == id)
-    {
-      pluginExists = true;
-      break;
-    }
-  }
-
-  if (pluginExists)
-  {
-    // Use non-blocking request to avoid blocking async_tcp task
-    pluginManager.requestPluginById(id);
-    sendJsonSuccess(request, "Plugin change requested");
+    sendJsonSuccess(request, "Plugin set successfully");
   }
   else
   {
     char errorMsg[64];
-    snprintf(errorMsg, sizeof(errorMsg), "Plugin with id %d not found", id);
+    snprintf(errorMsg, sizeof(errorMsg), "Could not set plugin to id %d", id);
     sendJsonError(request, 422, errorMsg);
   }
 }
@@ -217,6 +205,31 @@ void handleSetBrightness(AsyncWebServerRequest *request)
   Screen.setBaseBrightness(value, true);
   ScheduledBrightness.update();
   sendJsonSuccess(request, "Brightness set successfully");
+}
+
+void handleSetPower(AsyncWebServerRequest *request)
+{
+  const String state = request->arg("state");
+  if (state.equalsIgnoreCase("on"))
+  {
+    Screen.setPower(true);
+  }
+  else if (state.equalsIgnoreCase("off"))
+  {
+    Screen.setPower(false);
+  }
+  else if (state.equalsIgnoreCase("toggle"))
+  {
+    Screen.setPower(!Screen.isPowered());
+  }
+  else
+  {
+    sendJsonError(request, 422, "state must be on, off or toggle");
+    return;
+  }
+
+  sendInfo();
+  sendJsonSuccess(request, Screen.isPowered() ? "Display on" : "Display off");
 }
 
 void handleSetBrightnessScheduleBody(AsyncWebServerRequest *request,
@@ -326,9 +339,13 @@ void handleGetInfo(AsyncWebServerRequest *request)
   Plugin *activePlugin = pluginManager.getActivePlugin();
   jsonDocument["plugin"] = activePlugin ? activePlugin->getId() : -1;
   jsonDocument["rotation"] = Screen.currentRotation;
+  jsonDocument["power"] = Screen.isPowered();
   jsonDocument["baseBrightness"] = Screen.getBaseBrightness();
   jsonDocument["brightness"] = Screen.getCurrentBrightness();
   ScheduledBrightness.writeToJson(jsonDocument["brightnessSchedule"].to<JsonObject>());
+#ifdef ENABLE_MQTT
+  jsonDocument["mqttConnected"] = mqttIsConnected();
+#endif
   jsonDocument["scheduleActive"] = Scheduler.isActive;
   jsonDocument["rssi"] = WiFi.RSSI();
   jsonDocument["uptime"] = millis() / 1000;
@@ -342,7 +359,7 @@ void handleGetInfo(AsyncWebServerRequest *request)
   jsonDocument["resetReason"] = getResetReason();
 
   JsonArray scheduleArray = jsonDocument["schedule"].to<JsonArray>();
-  for (const auto &item : Scheduler.schedule)
+  for (const auto &item : Scheduler.getSchedule())
   {
     JsonObject scheduleItem = scheduleArray.add<JsonObject>();
     scheduleItem["pluginId"] = item.pluginId;
@@ -393,7 +410,7 @@ void handleClearSchedule(AsyncWebServerRequest *request)
 
 void handleStopSchedule(AsyncWebServerRequest *request)
 {
-  if (!Scheduler.schedule.empty())
+  if (Scheduler.hasSchedule())
   {
     Scheduler.stop();
     sendInfo();
@@ -407,7 +424,7 @@ void handleStopSchedule(AsyncWebServerRequest *request)
 
 void handleStartSchedule(AsyncWebServerRequest *request)
 {
-  if (!Scheduler.schedule.empty())
+  if (Scheduler.hasSchedule())
   {
     Scheduler.start();
     sendInfo();

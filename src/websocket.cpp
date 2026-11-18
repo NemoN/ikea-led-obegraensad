@@ -64,6 +64,7 @@ void sendInfo()
   jsonDocument["persist-plugin"] = pluginManager.getPersistedPluginId();
   jsonDocument["event"] = "info";
   jsonDocument["rotation"] = Screen.currentRotation;
+  jsonDocument["power"] = Screen.isPowered();
   jsonDocument["baseBrightness"] = Screen.getBaseBrightness();
   jsonDocument["brightness"] = Screen.getCurrentBrightness();
   JsonObject brightnessSchedule = jsonDocument["brightnessSchedule"].to<JsonObject>();
@@ -71,7 +72,7 @@ void sendInfo()
   jsonDocument["scheduleActive"] = Scheduler.isActive;
 
   JsonArray scheduleArray = jsonDocument["schedule"].to<JsonArray>();
-  for (const auto &item : Scheduler.schedule)
+  for (const auto &item : Scheduler.getSchedule())
   {
     JsonObject scheduleItem = scheduleArray.add<JsonObject>();
     scheduleItem["pluginId"] = item.pluginId;
@@ -191,11 +192,7 @@ void onWsEvent(AsyncWebSocket *server,
             return;
           }
 
-          Plugin *activePlugin = pluginManager.getActivePlugin();
-          if (activePlugin)
-          {
-            activePlugin->websocketHook(wsRequest);
-          }
+          pluginManager.dispatchWebsocketHook(wsRequest);
 
           const char *event = wsRequest["event"];
 
@@ -210,9 +207,9 @@ void onWsEvent(AsyncWebSocket *server,
             int pluginId = wsRequest["plugin"];
 
             Scheduler.clearSchedule();
-            // Use non-blocking request to avoid blocking async_tcp task
-            pluginManager.requestPluginById(pluginId);
-            // sendInfo() will be called by processPendingPluginChange()
+            // no sendInfo() here: on ESP32 the switch is only queued, so it
+            // would broadcast the old plugin; the switch itself sends info
+            pluginManager.setActivePluginById(pluginId);
           }
           else if (!strcmp(event, "persist-plugin"))
           {
@@ -238,6 +235,11 @@ void onWsEvent(AsyncWebSocket *server,
             uint8_t brightness = wsRequest["brightness"].as<uint8_t>();
             Screen.setBaseBrightness(brightness, true);
             ScheduledBrightness.update();
+            sendInfo();
+          }
+          else if (!strcmp(event, "power"))
+          {
+            Screen.setPower(wsRequest["power"] | !Screen.isPowered());
             sendInfo();
           }
           else if (!strcmp(event, "brightness-schedule"))

@@ -64,11 +64,14 @@
 #include "plugins/AnimationPlugin.h"
 #include "plugins/BigClockPlugin.h"
 #include "plugins/ClockPlugin.h"
+#include "plugins/FractalClockPlugin.h"
+#include "plugins/SmokeClockPlugin.h"
 #include "plugins/WeatherPlugin.h"
 #endif
 
 #include "asyncwebserver.h"
 #include "messages.h"
+#include "mqtt.h"
 #include "ota.h"
 #include "screen.h"
 #include "secrets.h"
@@ -226,7 +229,13 @@ void pressHandler(BfButton *btn, BfButton::press_pattern_t pattern)
   switch (pattern)
   {
   case BfButton::SINGLE_PRESS:
-    if (currentStatus != LOADING)
+    // a press only wakes a display that was switched off remotely
+    if (!Screen.isPowered())
+    {
+      Screen.setPower(true);
+      sendInfo();
+    }
+    else if (currentStatus != LOADING)
     {
       Scheduler.clearSchedule();
       pluginManager.activateNextPlugin();
@@ -234,7 +243,12 @@ void pressHandler(BfButton *btn, BfButton::press_pattern_t pattern)
     break;
 
   case BfButton::LONG_PRESS:
-    if (currentStatus != LOADING)
+    if (!Screen.isPowered())
+    {
+      Screen.setPower(true);
+      sendInfo();
+    }
+    else if (currentStatus != LOADING)
     {
       pluginManager.activatePersistedPlugin();
     }
@@ -274,7 +288,6 @@ void baseSetup()
 
   // Initialize configuration system (always safe)
   config.begin();
-  Screen.setPowerLimit(config.getPowerLimitMw());
 
 // server
 #ifdef ENABLE_SERVER
@@ -291,6 +304,9 @@ void baseSetup()
   initOTA(server);
   initWebsocketServer(server);
   initWebServer();
+#endif
+#ifdef ENABLE_MQTT
+  initMqtt();
 #endif
 
   pluginManager.addPlugin(new DrawPlugin());
@@ -325,6 +341,8 @@ void baseSetup()
   pluginManager.addPlugin(new AnimationPlugin());
   pluginManager.addPlugin(new DDPPlugin());
   pluginManager.addPlugin(new ArtNetPlugin());
+  pluginManager.addPlugin(new SmokeClockPlugin());
+  pluginManager.addPlugin(new FractalClockPlugin());
 #endif
 
   // Append new plugins to preserve the IDs stored in existing schedules.
@@ -351,8 +369,6 @@ void baseSetup()
 void runScreenJobs()
 {
   static uint8_t jobCounter = 0;
-
-  pluginManager.processPendingPluginChange();
 
   if (currentStatus == NONE)
   {
@@ -409,6 +425,8 @@ void setup()
   // The timer stays on the Arduino core (core 1 on dual-core ESP32,
   // core 0 on single-core variants such as the C3).
   Screen.setup();
+  // from here on plugin switches and websocket hooks are handed to the screen task
+  pluginManager.enableScreenTask();
   xTaskCreatePinnedToCore(screenDrawingTask,
                           "screenDrawingTask",
                           24576,  // 24KB - needed for HTTPS/SSL operations in WeatherPlugin
@@ -495,6 +513,10 @@ void loop()
     lastLiveFrameMillis = currentMillis;
     sendLiveFrame();
   }
+
+#ifdef ENABLE_MQTT
+  mqttLoop();
+#endif
 
   static NonBlockingDelay cleanupTimer;
   if (cleanupTimer.isReady(1000))

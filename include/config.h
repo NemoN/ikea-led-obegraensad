@@ -21,8 +21,17 @@ private:
   String ntpServer;
   String tzInfo;
   bool autoStartSchedule;
-  uint16_t powerLimitMw;
   bool initialized;
+
+  // MQTT / Home Assistant
+  bool mqttEnabled;
+  String mqttHost;
+  uint16_t mqttPort;
+  String mqttUser;
+  String mqttPassword;
+  String mqttTopic;
+  bool mqttDiscovery;
+  String mqttDiscoveryPrefix;
 
 public:
   Config();
@@ -44,18 +53,25 @@ public:
   String getNtpServer() const;
   String getTzInfo() const;
   bool getAutoStartSchedule() const;
-  uint16_t getPowerLimitMw() const;
   bool isInitialized() const { return initialized; }
+
+  bool getMqttEnabled() const { return mqttEnabled; }
+  String getMqttHost() const { return mqttHost; }
+  uint16_t getMqttPort() const { return mqttPort; }
+  String getMqttUser() const { return mqttUser; }
+  String getMqttPassword() const { return mqttPassword; }
+  // falls back to obegraensad/<last 6 hex digits of the MAC>
+  String getMqttTopic() const;
+  bool getMqttDiscovery() const { return mqttDiscovery; }
+  String getMqttDiscoveryPrefix() const;
   
   // Setters with validation
   void setWeatherLocation(const String& location);
   void setNtpServer(const String& server);
   void setTzInfo(const String& tz);
   void setAutoStartSchedule(bool autoStart);
-  // 0 disables the limit, otherwise POWER_LIMIT_MIN_MW..POWER_LIMIT_MAX_MW
-  void setPowerLimitMw(uint16_t milliwatts);
   
-  // Export to JSON
+  // Export to JSON, the MQTT password is never exported
   String toJson() const;
   
   // Import from JSON (validates input)

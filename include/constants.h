@@ -49,6 +49,12 @@
 #endif
 
 #ifdef ENABLE_SERVER
+// MQTT client with Home Assistant discovery, the broker is set in the Web GUI
+// (Settings → MQTT / Home Assistant). Remove to save flash and RAM.
+#define ENABLE_MQTT
+#endif
+
+#ifdef ENABLE_SERVER
 // https://github.com/nayarsystems/posix_tz_db/blob/master/zones.json
 #define NTP_SERVER "de.pool.ntp.org"
 #define TZ_INFO "CET-1CEST,M3.5.0,M10.5.0/3"
@@ -63,24 +69,6 @@ constexpr uint8_t MAX_BRIGHTNESS = 255;
 // skip values below this for such edges
 constexpr uint8_t MIN_EDGE_BRIGHTNESS = 16;
 constexpr uint16_t TOTAL_PIXELS = ROWS * COLS;
-
-// Adaptive power limit: when a frame would draw more than the power supply can
-// deliver, the whole frame is dimmed evenly, so a few lit pixels still get full
-// brightness. Rough model from a 5 W supply: 50% of the pixels at full
-// brightness or all pixels at 70% work, all pixels at full brightness browns
-// out. With ~0.6 W for the board and WiFi that leaves ~4.4 W for ~180 fully lit
-// pixels, ~24.5 mW each.
-// Default supply rating in mW, used until changed in the settings (or always
-// without storage), 0 disables the limit
-#define POWER_LIMIT_MW 5000
-constexpr uint16_t POWER_LIMIT_MIN_MW = 1000;
-// above this a fully lit screen stays at full brightness, use 0 to disable instead
-constexpr uint16_t POWER_LIMIT_MAX_MW = 10000;
-constexpr uint16_t POWER_BASE_MW = 600;
-// per pixel at full brightness, set above the ~24.5 mW estimate to be safe
-constexpr uint16_t POWER_PER_PIXEL_MW = 30;
-// share of the supply rating kept in reserve
-constexpr uint8_t POWER_HEADROOM_PERCENT = 10;
 
 // set your city or coords (https://github.com/chubin/wttr.in)
 #define WEATHER_LOCATION "Hamburg"

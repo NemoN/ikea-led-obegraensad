@@ -1,5 +1,34 @@
 #include "config.h"
+#include "storage.h"
 #include <ArduinoJson.h>
+
+#ifdef ESP32
+#include <WiFi.h>
+#endif
+#ifdef ESP8266
+#include <ESP8266WiFi.h>
+#endif
+
+static constexpr uint16_t DEFAULT_MQTT_PORT = 1883;
+static const char *DEFAULT_DISCOVERY_PREFIX = "homeassistant";
+
+// MQTT topics must not contain wildcards, and HA object ids are built from them
+static bool isValidTopic(const String &topic)
+{
+  if (topic.length() == 0 || topic.length() >= 100 || topic.startsWith("/") || topic.endsWith("/"))
+  {
+    return false;
+  }
+  for (size_t i = 0; i < topic.length(); i++)
+  {
+    const char c = topic[i];
+    if (c == '#' || c == '+' || c == ' ')
+    {
+      return false;
+    }
+  }
+  return true;
+}
 
 Config config;
 
@@ -54,8 +83,8 @@ void Config::begin()
   Serial.println(tzInfo);
   Serial.print("[Config] Auto-Start Schedule: ");
   Serial.println(autoStartSchedule ? "enabled" : "disabled");
-  Serial.print("[Config] Power Limit: ");
-  Serial.println(powerLimitMw > 0 ? String(powerLimitMw) + " mW" : String("disabled"));
+  Serial.print("[Config] MQTT: ");
+  Serial.println(mqttEnabled ? mqttHost + ":" + String(mqttPort) : String("disabled"));
   Serial.println("[Config] ============================================");
 }
 
@@ -66,7 +95,15 @@ void Config::setDefaults()
   ntpServer = String(NTP_SERVER);
   tzInfo = String(TZ_INFO);
   autoStartSchedule = false;
-  powerLimitMw = POWER_LIMIT_MW;
+
+  mqttEnabled = false;
+  mqttHost = "";
+  mqttPort = DEFAULT_MQTT_PORT;
+  mqttUser = "";
+  mqttPassword = "";
+  mqttTopic = "";
+  mqttDiscovery = true;
+  mqttDiscoveryPrefix = DEFAULT_DISCOVERY_PREFIX;
 }
 
 void Config::load()
@@ -79,11 +116,19 @@ void Config::load()
   
   try {
     // Load with fallback to defaults
-    weatherLocation = preferences.getString("weatherLoc", String(WEATHER_LOCATION));
-    ntpServer = preferences.getString("ntpServer", String(NTP_SERVER));
-    tzInfo = preferences.getString("tzInfo", String(TZ_INFO));
+    weatherLocation = getStoredString(preferences, "weatherLoc", WEATHER_LOCATION);
+    ntpServer = getStoredString(preferences, "ntpServer", NTP_SERVER);
+    tzInfo = getStoredString(preferences, "tzInfo", TZ_INFO);
     autoStartSchedule = preferences.getBool("autoSchedule", false);
-    setPowerLimitMw(preferences.getUShort("powerLimit", POWER_LIMIT_MW));
+
+    mqttEnabled = preferences.getBool("mqttEnabled", false);
+    mqttHost = getStoredString(preferences, "mqttHost");
+    mqttPort = preferences.getUShort("mqttPort", DEFAULT_MQTT_PORT);
+    mqttUser = getStoredString(preferences, "mqttUser");
+    mqttPassword = getStoredString(preferences, "mqttPass");
+    mqttTopic = getStoredString(preferences, "mqttTopic");
+    mqttDiscovery = preferences.getBool("mqttDisc", true);
+    mqttDiscoveryPrefix = getStoredString(preferences, "mqttDiscPfx", DEFAULT_DISCOVERY_PREFIX);
     
     Serial.println("[Config] Configuration loaded from storage");
   } catch (...) {
@@ -106,7 +151,15 @@ void Config::save()
     preferences.putString("ntpServer", ntpServer);
     preferences.putString("tzInfo", tzInfo);
     preferences.putBool("autoSchedule", autoStartSchedule);
-    preferences.putUShort("powerLimit", powerLimitMw);
+
+    preferences.putBool("mqttEnabled", mqttEnabled);
+    preferences.putString("mqttHost", mqttHost);
+    preferences.putUShort("mqttPort", mqttPort);
+    preferences.putString("mqttUser", mqttUser);
+    preferences.putString("mqttPass", mqttPassword);
+    preferences.putString("mqttTopic", mqttTopic);
+    preferences.putBool("mqttDisc", mqttDiscovery);
+    preferences.putString("mqttDiscPfx", mqttDiscoveryPrefix);
     
     Serial.println("[Config] Configuration saved");
   } catch (...) {
@@ -138,9 +191,21 @@ bool Config::getAutoStartSchedule() const
   return autoStartSchedule;
 }
 
-uint16_t Config::getPowerLimitMw() const
+String Config::getMqttTopic() const
 {
-  return powerLimitMw;
+  if (mqttTopic.length() > 0)
+  {
+    return mqttTopic;
+  }
+  String mac = WiFi.macAddress();
+  mac.replace(":", "");
+  mac.toLowerCase();
+  return "obegraensad/" + mac.substring(6);
+}
+
+String Config::getMqttDiscoveryPrefix() const
+{
+  return mqttDiscoveryPrefix.length() > 0 ? mqttDiscoveryPrefix : String(DEFAULT_DISCOVERY_PREFIX);
 }
 
 void Config::setWeatherLocation(const String& location)
@@ -170,13 +235,6 @@ void Config::setAutoStartSchedule(bool autoStart)
   autoStartSchedule = autoStart;
 }
 
-void Config::setPowerLimitMw(uint16_t milliwatts)
-{
-  if (milliwatts == 0 || (milliwatts >= POWER_LIMIT_MIN_MW && milliwatts <= POWER_LIMIT_MAX_MW)) {
-    powerLimitMw = milliwatts;
-  }
-}
-
 
 String Config::toJson() const
 {
@@ -185,7 +243,14 @@ String Config::toJson() const
   doc["ntpServer"] = ntpServer;
   doc["tzInfo"] = tzInfo;
   doc["autoStartSchedule"] = autoStartSchedule;
-  doc["powerLimitMw"] = powerLimitMw;
+  doc["mqttEnabled"] = mqttEnabled;
+  doc["mqttHost"] = mqttHost;
+  doc["mqttPort"] = mqttPort;
+  doc["mqttUser"] = mqttUser;
+  doc["mqttPasswordSet"] = mqttPassword.length() > 0;
+  doc["mqttTopic"] = getMqttTopic();
+  doc["mqttDiscovery"] = mqttDiscovery;
+  doc["mqttDiscoveryPrefix"] = getMqttDiscoveryPrefix();
   
   String output;
   serializeJson(doc, output);
@@ -235,10 +300,64 @@ bool Config::fromJson(const String& json)
     autoStartSchedule = doc["autoStartSchedule"].as<bool>();
   }
 
-  if (doc["powerLimitMw"].is<uint32_t>()) {
-    const uint32_t milliwatts = doc["powerLimitMw"].as<uint32_t>();
-    if (milliwatts <= POWER_LIMIT_MAX_MW) {
-      setPowerLimitMw(milliwatts);
+  if (doc["mqttEnabled"].is<bool>())
+  {
+    mqttEnabled = doc["mqttEnabled"].as<bool>();
+  }
+
+  if (doc["mqttHost"].is<String>())
+  {
+    String host = doc["mqttHost"].as<String>();
+    host.trim();
+    if (host.length() < 100)
+    {
+      mqttHost = host;
+    }
+  }
+
+  if (doc["mqttPort"].is<int>())
+  {
+    const int port = doc["mqttPort"].as<int>();
+    if (port > 0 && port <= 65535)
+    {
+      mqttPort = port;
+    }
+  }
+
+  if (doc["mqttUser"].is<String>() && doc["mqttUser"].as<String>().length() < 100)
+  {
+    mqttUser = doc["mqttUser"].as<String>();
+  }
+
+  // absent means keep the stored password, the GUI never receives it
+  if (doc["mqttPassword"].is<String>() && doc["mqttPassword"].as<String>().length() < 100)
+  {
+    mqttPassword = doc["mqttPassword"].as<String>();
+  }
+
+  if (doc["mqttTopic"].is<String>())
+  {
+    String topic = doc["mqttTopic"].as<String>();
+    topic.trim();
+    // empty resets to the MAC based default
+    if (topic.length() == 0 || isValidTopic(topic))
+    {
+      mqttTopic = topic;
+    }
+  }
+
+  if (doc["mqttDiscovery"].is<bool>())
+  {
+    mqttDiscovery = doc["mqttDiscovery"].as<bool>();
+  }
+
+  if (doc["mqttDiscoveryPrefix"].is<String>())
+  {
+    String prefix = doc["mqttDiscoveryPrefix"].as<String>();
+    prefix.trim();
+    if (prefix.length() == 0 || isValidTopic(prefix))
+    {
+      mqttDiscoveryPrefix = prefix;
     }
   }
   
