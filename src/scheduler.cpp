@@ -1,4 +1,5 @@
 #include "scheduler.h"
+#include "config.h"
 #include "websocket.h"
 
 PluginScheduler &PluginScheduler::getInstance()
@@ -107,22 +108,20 @@ void PluginScheduler::init()
 {
 #ifdef ENABLE_STORAGE
   storage.begin("led-wall", true);
-  int storedActive = storage.getInt("scheduleactive", 0);
-  bool scheduleIsSet = setScheduleByJSONString(storage.getString("schedule"));
-
-  isActive = (storedActive == 1);
+  const String savedSchedule = storage.getString("schedule");
   storage.end();
 
-  if (isActive && !schedule.empty())
-  {
-    currentIndex = 0;
-    lastSwitch = millis();
-    switchToCurrentPlugin();
-  }
+  // Loading must not rewrite NVS or reopen a Preferences handle still in use.
+  setScheduleByJSONString(savedSchedule, false);
 #endif
+
+  if (config.getAutoStartSchedule())
+  {
+    start();
+  }
 }
 
-bool PluginScheduler::setScheduleByJSONString(String scheduleJson)
+bool PluginScheduler::setScheduleByJSONString(String scheduleJson, bool shouldStore)
 {
   if (scheduleJson.length() == 0)
   {
@@ -132,20 +131,23 @@ bool PluginScheduler::setScheduleByJSONString(String scheduleJson)
   JsonDocument doc;
   DeserializationError error = deserializeJson(doc, scheduleJson);
 
-  if (error)
+  if (error || !doc.is<JsonArray>())
   {
     return false;
   }
 
-  clearSchedule(true);
+  clearSchedule();
+  schedule.clear();
 
 #ifdef ENABLE_STORAGE
-  storage.begin("led-wall");
-  storage.putString("schedule", scheduleJson);
-  storage.end();
+  if (shouldStore)
+  {
+    storage.begin("led-wall");
+    storage.putString("schedule", scheduleJson);
+    storage.putInt("scheduleactive", 0);
+    storage.end();
+  }
 #endif
-
-  clearSchedule();
 
   for (const auto &item : doc.as<JsonArray>())
   {

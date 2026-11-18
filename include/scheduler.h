@@ -36,7 +36,7 @@ public:
   void stop();
   void update();
   void init();
-  bool setScheduleByJSONString(String scheduleJson);
+  bool setScheduleByJSONString(String scheduleJson, bool shouldStore = true);
 
 private:
   void switchToCurrentPlugin();

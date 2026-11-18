@@ -256,6 +256,7 @@ Currently configurable at runtime:
 - Weather location
 - NTP server
 - Timezone (POSIX TZ string)
+- Start plugin schedule on boot (disabled by default)
 
 The same settings are also available via `GET /api/config`, `POST /api/config`, and `POST /api/config/reset`.
 ### Power Limit
@@ -559,6 +560,8 @@ curl "http://your-server/api/removemessage?id=1"
 ### Plugin Scheduler
 
 Automatically switch between plugins on a schedule.
+
+Enable **Settings → Startup → Start plugin schedule on boot** to start the saved schedule after every reboot. When disabled, the device starts its saved default plugin, regardless of whether the schedule was running before reboot.
 
 #### Set Schedule
 

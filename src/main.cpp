@@ -425,7 +425,6 @@ void setup()
   // nothing called the old screenDrawingTask(), so the screen never started
   Screen.setup();
   ScheduledBrightness.init();
-  Scheduler.start();
 }
 #endif
 
