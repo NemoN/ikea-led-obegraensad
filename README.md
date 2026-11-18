@@ -77,7 +77,7 @@ Turn your OBEGRÄNSAD LED Wall Lamp into a live drawing canvas
 - Weather
 - Rain
 - Matrix Rain
-- Animation (with Animation Creator in Web UI)
+- Animation (with Animation Creator in Web UI, up to 128 frames per animation)
 - Firework
 - Blob
 - Spiral

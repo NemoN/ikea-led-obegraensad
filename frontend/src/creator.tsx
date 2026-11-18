@@ -24,6 +24,8 @@ import {
   DEFAULT_FRAME_DELAY_MS,
   HISTORY_DEBOUNCE_MS,
   INITIAL_HISTORY_SAVE_DELAY_MS,
+  MAX_ANIMATION_FRAMES,
+  UPLOAD_TIMEOUT_MS,
 } from "./creator/constants";
 import { useAnimation } from "./creator/hooks/useAnimation";
 import { useAnimationStorage } from "./creator/hooks/useAnimationStorage";
@@ -45,6 +47,24 @@ export const Creator: Component = () => {
   const [screenSignals, setScreenSignals] = createSignal<FrameSignals>([]);
   const [animationDelayMs, setAnimationDelayMs] = createSignal(DEFAULT_FRAME_DELAY_MS);
   const [focusedFrameIndex, setFocusedFrameIndex] = createSignal(0);
+  const [pendingUpload, setPendingUpload] = createSignal<string | null>(null);
+
+  createEffect(() => {
+    if (!pendingUpload()) return;
+    const timeout = setTimeout(() => {
+      setPendingUpload(null);
+      toast("Upload was not confirmed by the device", 3000);
+    }, UPLOAD_TIMEOUT_MS);
+    onCleanup(() => clearTimeout(timeout));
+  });
+
+  createEffect(() => {
+    const requestId = pendingUpload();
+    const result = store.animationUploadResult;
+    if (!requestId || result?.requestId !== requestId) return;
+    setPendingUpload(null);
+    toast(result.message, result.success ? 2000 : 4000);
+  });
 
   const { saveToLocalStorage, loadFromLocalStorage, hasLoadedFromStorage } =
     useAnimationStorage(createNewScreen);
@@ -72,6 +92,10 @@ export const Creator: Component = () => {
   };
 
   const handleAddScreen = () => {
+    if (screenSignals().length >= MAX_ANIMATION_FRAMES) {
+      toast(`An animation can contain at most ${MAX_ANIMATION_FRAMES} frames`, 3000);
+      return;
+    }
     setScreenSignals((signals): FrameSignals => {
       const lastScreen = signals.length > 0 ? signals[signals.length - 1][0]() : undefined;
       const newSignal = createNewScreen(lastScreen ? [...lastScreen] : undefined);
@@ -110,6 +134,10 @@ export const Creator: Component = () => {
   };
 
   const handleDuplicateFrame = (index: number) => {
+    if (screenSignals().length >= MAX_ANIMATION_FRAMES) {
+      toast(`An animation can contain at most ${MAX_ANIMATION_FRAMES} frames`, 3000);
+      return;
+    }
     setScreenSignals((signals) => {
       const frameToDuplicate = signals[index][0]();
       const newSignal = createNewScreen([...frameToDuplicate]);
@@ -151,19 +179,29 @@ export const Creator: Component = () => {
   };
 
   const handleUploadData = () => {
+    if (pendingUpload()) return;
+    if (screenSignals().length > MAX_ANIMATION_FRAMES) {
+      toast(`An animation can contain at most ${MAX_ANIMATION_FRAMES} frames`, 3000);
+      return;
+    }
+    if (store.connectionState() !== WebSocket.OPEN) {
+      toast("Connect to the device before uploading", 3000);
+      return;
+    }
     if (isAnimationPluginActive()) {
       const screens = screenSignals().map(([screen]) => screen());
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      setPendingUpload(requestId);
 
       actions.send(
         JSON.stringify({
           event: "upload",
+          requestId,
           screens: screens.length,
           frameDelay: animationDelayMs(),
           data: screens.map((screen) => matrixToHexArray(screen.map((s) => (s > 0 ? 1 : 0)))),
         }),
       );
-
-      toast("Data uploaded successfully!", 3000);
     } else {
       toast('Set plugin to "Animation"!', 3000);
     }
@@ -204,6 +242,10 @@ export const Creator: Component = () => {
 
           if (!data.frames || !Array.isArray(data.frames)) {
             toast("Invalid animation file format", 3000);
+            return;
+          }
+          if (data.frames.length > MAX_ANIMATION_FRAMES) {
+            toast(`An animation can contain at most ${MAX_ANIMATION_FRAMES} frames`, 3000);
             return;
           }
 
@@ -444,7 +486,10 @@ export const Creator: Component = () => {
               }
             >
               <div class="grid grid-cols-2 gap-2">
-                <Button onClick={handleAddScreen}>
+                <Button
+                  disabled={screenSignals().length >= MAX_ANIMATION_FRAMES}
+                  onClick={handleAddScreen}
+                >
                   <i class="fa-solid fa-plus" />
                   Add
                 </Button>
@@ -500,11 +545,11 @@ export const Creator: Component = () => {
             >
               <Button
                 class="btn-accent"
-                disabled={screenSignals().length === 0 || isPlaying()}
+                disabled={screenSignals().length === 0 || isPlaying() || !!pendingUpload()}
                 onClick={handleUploadData}
               >
                 <i class="fa-solid fa-upload" />
-                Upload to device
+                {pendingUpload() ? "Uploading…" : "Upload to device"}
               </Button>
             </Show>
           </SidebarSection>

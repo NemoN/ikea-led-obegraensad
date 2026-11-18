@@ -67,6 +67,7 @@ const [mainStore, setStore] = createStore<Store>({
   connectionStatus: connectionStatus[0],
   schedule: [],
   livePreview: readLivePreview(),
+  animationUploadResult: null,
 });
 
 const actions: StoreActions = {
@@ -163,6 +164,19 @@ export const StoreProvider = (props?: { value?: Store; children?: JSX.Element })
       }
 
       switch (json.event) {
+        case "animationUpload":
+          if (
+            typeof json.requestId === "string" &&
+            isValidBoolean(json.success) &&
+            typeof json.message === "string"
+          ) {
+            setStore("animationUploadResult", {
+              requestId: json.requestId,
+              success: json.success,
+              message: json.message,
+            });
+          }
+          break;
         case "info":
           batch(() => {
             if (

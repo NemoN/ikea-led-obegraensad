@@ -11,6 +11,12 @@ export interface ScheduleItem {
   duration: number;
 }
 
+export interface AnimationUploadResult {
+  requestId: string;
+  success: boolean;
+  message: string;
+}
+
 export type BrightnessSchedule = {
   enabled: boolean;
   startTime: string;
@@ -54,6 +60,7 @@ export interface Store {
   connectionStatus?: string;
   schedule: ScheduleItem[];
   livePreview: boolean;
+  animationUploadResult: AnimationUploadResult | null;
 }
 
 export interface IToastContext {

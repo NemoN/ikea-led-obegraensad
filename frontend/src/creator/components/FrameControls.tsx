@@ -1,6 +1,7 @@
 import type { Component } from "solid-js";
 
 import { Button } from "../../components/button";
+import { MAX_ANIMATION_FRAMES } from "../constants";
 
 interface FrameControlsProps {
   focusedFrameIndex: number;
@@ -41,6 +42,7 @@ export const FrameControls: Component<FrameControlsProps> = (props) => {
           widthAuto
           title="Duplicate frame"
           aria-label="Duplicate frame"
+          disabled={props.totalFrames >= MAX_ANIMATION_FRAMES}
           onClick={props.onDuplicate}
           class="btn-ghost btn-icon size-9"
         >

@@ -1,4 +1,6 @@
 export const MATRIX_SIZE = 256;
+export const MAX_ANIMATION_FRAMES = 128;
+export const UPLOAD_TIMEOUT_MS = 10000;
 export const DEFAULT_FRAME_DELAY_MS = 400;
 export const MIN_FRAME_DELAY_MS = 10;
 export const MAX_FRAME_DELAY_MS = 2000;
